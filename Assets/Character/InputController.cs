@@ -3,27 +3,87 @@ using UnityEngine.InputSystem;
 
 public class InputController : MonoBehaviour
 {
-    public CharacterController CharacterController;
+    private IControllable currentPossessedObject;
+    private IControllable humanInterface;
+    private IControllable vehicleInterface;
 
-    public InputAction _moveAction, _lookAction; //can add more in project settings
-    
-    void Start()
+    private InputAction moveAction;
+    private InputAction lookAction;
+    private InputAction interactAction;
+
+    [Header("Targets")]
+    [SerializeField] private PlayerController humanCharacter;
+    [SerializeField] private RobotController mechCharacter;
+
+    [Header("Starting Settings")]
+    [SerializeField] private MonoBehaviour startingControlTarget;
+
+    void Awake()
     {
-        _moveAction = InputSystem.actions.FindAction("Move");
-        _lookAction = InputSystem.actions.FindAction("Look");
+        // Build actions with bindings in code
+        moveAction = new InputAction("Move", InputActionType.Value);
+        moveAction.AddCompositeBinding("2DVector")
+            .With("Up", "<Keyboard>/w")
+            .With("Down", "<Keyboard>/s")
+            .With("Left", "<Keyboard>/a")
+            .With("Right", "<Keyboard>/d");
 
-        Cursor.visible = false;
+        lookAction = new InputAction("Look", InputActionType.Value);
+        lookAction.AddBinding("<Mouse>/delta");
+
+        interactAction = new InputAction("Interact", InputActionType.Button);
+        interactAction.AddBinding("<Keyboard>/e");
+
+        // Resolve interfaces
+        humanInterface = humanCharacter;
+        vehicleInterface = mechCharacter;
+
+        if (startingControlTarget == null)
+            startingControlTarget = humanCharacter;
+
+        currentPossessedObject = startingControlTarget as IControllable;
+
+        // Set correct camera on frame one
+        if (humanInterface != null) humanInterface.SetFocus(currentPossessedObject == humanInterface);
+        if (vehicleInterface != null) vehicleInterface.SetFocus(currentPossessedObject == vehicleInterface);
+
+        interactAction.started += ctx => HandleInteraction();
     }
 
-    // Update is called once per frame
     void Update()
     {
-        Vector2 movementVec = _moveAction.ReadValue<Vector2>();
-        CharacterController.PrcoessMove(movementVec);
+        if (currentPossessedObject == null) return;
 
-        Vector2 lookVec = _lookAction.ReadValue<Vector2>();
-        CharacterController.Rotate(lookVec);
+        Vector2 moveInput = moveAction.ReadValue<Vector2>();
+        Vector2 lookInput = lookAction.ReadValue<Vector2>();
+
+        currentPossessedObject.ProcessMove(moveInput);
+        currentPossessedObject.Rotate(lookInput);
     }
 
-  
+    private void HandleInteraction()
+    {
+        IControllable oldTarget = currentPossessedObject;
+        IControllable newTarget = (currentPossessedObject == humanInterface) ? vehicleInterface : humanInterface;
+
+        if (oldTarget != null) oldTarget.SetFocus(false);
+        if (newTarget != null) newTarget.SetFocus(true);
+
+        currentPossessedObject = newTarget;
+        Debug.Log("Swapped active controls!");
+    }
+
+    void OnEnable()
+    {
+        moveAction.Enable();
+        lookAction.Enable();
+        interactAction.Enable();
+    }
+
+    void OnDisable()
+    {
+        moveAction.Disable();
+        lookAction.Disable();
+        interactAction.Disable();
+    }
 }
