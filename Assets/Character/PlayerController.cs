@@ -10,6 +10,7 @@ public class PlayerController : MonoBehaviour, IControllable
     private UnityEngine.CharacterController _playerController;
     private GameObject _meshChildObj;
     private MeshFilter meshFilter;
+    private Rigidbody rb;
 
     private bool _isPossessed;
 
@@ -18,7 +19,6 @@ public class PlayerController : MonoBehaviour, IControllable
     // Velocity tracks full 3D movement (X/Z = horizontal, Y = vertical/gravity)
     private Vector3 _velocity;
     private float _yaw;
-    private float _modelYaw;
     private float _pitch;
     private Camera _camera;
 
@@ -66,21 +66,24 @@ public class PlayerController : MonoBehaviour, IControllable
         _playerController = GetComponent<UnityEngine.CharacterController>();
         _currentSpeed = WalkSpeed;
 
-
+        GetComponent<Rigidbody>();
+        GameObject newCharacter = new GameObject("DynamicCharacter");
+        Rigidbody rb = newCharacter.AddComponent<Rigidbody>();
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         // Child object for mesh
-        _meshChildObj = new GameObject("PlayerMesh");
-        _meshChildObj.transform.SetParent(this.transform);
-        _meshChildObj.transform.localPosition = Vector3.zero;
-        _meshChildObj.transform.localRotation = Quaternion.identity;
+   //     _meshChildObj = new GameObject("PlayerMesh");
+   //     _meshChildObj.transform.SetParent(this.transform);
+   //     _meshChildObj.transform.localPosition = Vector3.zero;
+   //     _meshChildObj.transform.localRotation = Quaternion.identity;
+   //
 
 
-
-        meshFilter = _meshChildObj.AddComponent<MeshFilter>();
-        MeshRenderer renderer = _meshChildObj.AddComponent<MeshRenderer>();
-        if (characterMesh != null) meshFilter.mesh = characterMesh;
-        if (characterMaterial != null) renderer.material = characterMaterial;
-
+ //       meshFilter = _meshChildObj.AddComponent<MeshFilter>();
+ //       MeshRenderer renderer = _meshChildObj.AddComponent<MeshRenderer>();
+ //       if (characterMesh != null) meshFilter.mesh = characterMesh;
+ //       if (characterMaterial != null) renderer.material = characterMaterial;
+ //
 
 
         // Child object for camera
@@ -197,16 +200,13 @@ public class PlayerController : MonoBehaviour, IControllable
 
     public void Rotate(Vector2 rotvec)
     {
-                 if (_camera == null || _meshChildObj == null) return;
+                 if (_camera == null) return;
 
                  _yaw += rotvec.x * RotSpd * Time.deltaTime;
                  _pitch -= rotvec.y * RotSpd * Time.deltaTime;
                  _pitch = Mathf.Clamp(_pitch, -80f, 80f);
 
                  _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0f);
-
-                 _modelYaw = Mathf.MoveTowardsAngle(_modelYaw, _yaw, Time.deltaTime * 70f);
-                 _meshChildObj.transform.localRotation = Quaternion.Euler(0f, _modelYaw, 0f);
     }
 
     public void Jump()
@@ -219,6 +219,11 @@ public class PlayerController : MonoBehaviour, IControllable
                  Vector3 camRight = _camera.transform.right; camRight.y = 0f; camRight.Normalize();
                  _jumpDir = (camForward * _moveInput.y + camRight * _moveInput.x).normalized;
              }
+    }
+
+    public void JumpCancelled()
+    {
+
     }
 
     public void SetSprint(bool sprinting)

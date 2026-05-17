@@ -7,4 +7,5 @@ public interface IControllable
     // Add this line to handle camera/focus states
     void SetFocus(bool isFocused);
     void Jump();
+    void JumpCancelled();
 }

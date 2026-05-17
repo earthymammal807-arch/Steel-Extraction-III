@@ -68,6 +68,7 @@ public class InputController : MonoBehaviour
         sprintAction.performed += OnSprintPressed;
         sprintAction.canceled += OnSprintReleased;
         jumpAction.performed += OnJump;
+        jumpAction.canceled += OnJumpReleased;
     }
 
     void OnDisable()
@@ -77,6 +78,7 @@ public class InputController : MonoBehaviour
         sprintAction.performed -= OnSprintPressed;
         sprintAction.canceled -= OnSprintReleased;
         jumpAction.performed -= OnJump;
+        jumpAction.canceled -= OnJumpReleased;
 
         moveAction.Disable();
         lookAction.Disable();
@@ -122,6 +124,10 @@ public class InputController : MonoBehaviour
 
     private void OnJump(InputAction.CallbackContext ctx)
     {
-        if (currentPossessedObject is PlayerController p) p.Jump();
+        currentPossessedObject.Jump();
+    }
+    private void OnJumpReleased(InputAction.CallbackContext ctx)
+    {
+        currentPossessedObject.JumpCancelled();
     }
 }

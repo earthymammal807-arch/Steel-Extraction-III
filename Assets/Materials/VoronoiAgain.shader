@@ -2,14 +2,19 @@
 {
     Properties 
     {
-        _Scale      ("Voronoi Scale",    Range(1.0,  500.0)) = 15.0
-        _BlackPoint ("BlackPoint value", Range(0.0,   1.0)) = 0.0
-        _WhitePoint ("WhitePoint value", Range(0.0,   1.0)) = 0.24
-        _BumpStrength ("Bump Strength",  Range(0.0,  200.0)) = 5.0
-        _NoiseScale ("Noise Scale",      Range(0.0,  200.0)) = 12.0
-        _BumpFadeStart  ("Bump Fade Start",  Range(0.0, 1000.0)) = 30.0
+        _Scale          ("Voronoi Scale",    Range(1.0,  500.0)) = 15.0
+        _BlackPoint     ("BlackPoint value", Range(0.0,   1.0)) = 0.0
+        _WhitePoint     ("WhitePoint value", Range(0.0,   1.0)) = 0.24
+        _NoiseScale     ("Noise Scale",      Range(0.0,  200.0)) = 12.0
         _EdgeFadeStart  ("Edge Fade Start",  Range(0.0, 1000.0)) = 20.0
         _NoiseFadeStart ("Noise Fade Start", Range(0.0, 1000.0)) = 15.0
+
+        // ── Restored Tiling and Offset fields ──────────────────
+        _NormalMapA     ("Normal Map A (Mask = 0)", 2D) = "bump" {}
+        _NormalScaleA   ("Normal Scale A", Range(0.0, 2.0)) = 1.0
+        
+        _NormalMapB     ("Normal Map B (Mask = 1)", 2D) = "bump" {}
+        _NormalScaleB   ("Normal Scale B", Range(0.0, 2.0)) = 1.0
     }
 
     SubShader 
@@ -35,9 +40,7 @@
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "VoronoiDTE.hlsl"
             #include "SimpleBrownNoise.hlsl"
-            #include "FloatToNormal.hlsl"
-
-            // ── STRUCTS ───────────────────────────────────────────────
+            #include "QuickNormalMap.hlsl"
 
             struct Attributes 
             {
@@ -57,25 +60,27 @@
                 float3 positionWS  : TEXCOORD4;
             };
 
-            // ── CONSTANT BUFFER ───────────────────────────────────────
-
             CBUFFER_START(UnityPerMaterial)
                 float _Scale;
                 float _WhitePoint;
                 float _BlackPoint;
-                float _BumpStrength;
                 float _NoiseScale;
-                float _BumpFadeStart;
                 float _EdgeFadeStart;
                 float _NoiseFadeStart;
+                
+                float _NormalScaleA;
+                float4 _NormalMapA_ST; // Unity uses this to pass Tiling/Offset to the CBUFFER
+                
+                float _NormalScaleB;
+                float4 _NormalMapB_ST; // Unity uses this to pass Tiling/Offset to the CBUFFER
             CBUFFER_END
 
-            // ── VERTEX SHADER ─────────────────────────────────────────
+            TEXTURE2D(_NormalMapA); SAMPLER(sampler_NormalMapA);
+            TEXTURE2D(_NormalMapB); SAMPLER(sampler_NormalMapB);
 
             Varyings vert(Attributes input) 
             {
                 Varyings output;
-
                 output.positionCS  = TransformObjectToHClip(input.positionOS.xyz);
                 output.positionWS  = TransformObjectToWorld(input.positionOS.xyz);
                 output.uv          = input.uv;
@@ -88,73 +93,53 @@
                 return output;
             }
 
-            // ── FRAGMENT SHADER ───────────────────────────────────────
-
             float4 frag(Varyings input) : SV_Target 
             {
-                // ── Distance from camera ──────────────────────────────
-                float dist = length(input.positionWS - _WorldSpaceCameraPos);
+                // 1. Distance & Masking Fades
+                float dist      = length(input.positionWS - _WorldSpaceCameraPos);
+                float edgeFade  = saturate(dist / _EdgeFadeStart);          
+                float noiseFade = saturate(1.0 - (dist / _NoiseFadeStart)); 
 
-                // ── LOD fades (all 0→1 as distance increases) ─────────
-                float bumpFade  = saturate(1.0 - (dist / _BumpFadeStart));  // bumps flatten at distance
-                float edgeFade  = saturate(dist / _EdgeFadeStart);          // edges soften at distance
-                float noiseFade = saturate(1.0 - (dist / _NoiseFadeStart)); // noise fades first
-
-                // ── Voronoi ───────────────────────────────────────────
+                // 2. Anti-Aliased Procedural Voronoi
                 float2 scaledUV = input.uv * _Scale;
                 float  lines    = voronoi_DTE(scaledUV);
+                float  delta    = fwidth(lines);
 
-                // Soften black/white contrast at distance to kill aliasing
-                float adjustedBlack = lerp(_BlackPoint, 0.4, edgeFade);
-                float adjustedWhite = lerp(_WhitePoint, 0.6, edgeFade);
-                lines = smoothstep(adjustedBlack, adjustedWhite, lines);
+                float smoothBlack = lerp(_BlackPoint, 0.4, edgeFade) - delta;
+                float smoothWhite = lerp(_WhitePoint, 0.6, edgeFade) + delta;
+                lines = smoothstep(smoothBlack, smoothWhite, lines);
 
-                // ── Noise (fades out earliest) ────────────────────────
+                // 3. Noise & Mask Calculation
                 float noise = brownian_noise(scaledUV * _NoiseScale, 12) * noiseFade;
+                float mask  = saturate(lines - noise);
 
-                // ── Normal generation with distance-faded strength ────
-                float finalBump  = _BumpStrength * bumpFade;
-                float3 tanNormal = ValueToNormal(lines - noise, finalBump);
+                // ── 4. Apply Tiling & Offset to the normal map UVs ──
+                float2 uvNormalA = TRANSFORM_TEX(input.uv, _NormalMapA);
+                float2 uvNormalB = TRANSFORM_TEX(input.uv, _NormalMapB);
 
-                // ── TBN → world space ─────────────────────────────────
-                float3 N = normalize(input.normalWS);
-                float3 T = normalize(input.tangentWS);
-                float3 B = normalize(input.bitangentWS);
+                // 5. Sample World Space Normal Maps via Include (using the scaled UVs)
+                float3 normalA = GetWorldSpaceNormalMap(uvNormalA, input.normalWS, input.tangentWS, input.bitangentWS, _NormalMapA, sampler_NormalMapA, _NormalScaleA);
+                float3 normalB = GetWorldSpaceNormalMap(uvNormalB, input.normalWS, input.tangentWS, input.bitangentWS, _NormalMapB, sampler_NormalMapB, _NormalScaleB);
+                float3 finalNormal = normalize(lerp(normalA, normalB, mask));
 
-                float3x3 TBN       = float3x3(T, B, N);
-                float3 finalNormal = normalize(mul(tanNormal, TBN));
-
-                // ── Shadow coord ──────────────────────────────────────
-                #if defined(_MAIN_LIGHT_SHADOWS) || defined(_MAIN_LIGHT_SHADOWS_CASCADE)
-                    float4 shadowCoord = TransformWorldToShadowCoord(input.positionWS);
-                #else
-                    float4 shadowCoord = float4(0, 0, 0, 0);
-                #endif
-
-                // ── Lighting ──────────────────────────────────────────
+                // 6. Minimal URP Surface Lighting Data
                 InputData lightingInput = (InputData)0;
-                lightingInput.positionWS              = input.positionWS;
-                lightingInput.normalWS                = finalNormal;
-                lightingInput.viewDirectionWS         = GetWorldSpaceNormalizeViewDir(input.positionWS);
-                lightingInput.shadowCoord             = shadowCoord;
-                lightingInput.fogCoord                = 0;
-                lightingInput.vertexLighting          = half3(0, 0, 0);
-                lightingInput.bakedGI                 = SampleSH(finalNormal);
-                lightingInput.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                lightingInput.shadowMask              = half4(1, 1, 1, 1);
+                lightingInput.positionWS      = input.positionWS;
+                lightingInput.normalWS        = finalNormal;
+                lightingInput.viewDirectionWS = GetWorldSpaceNormalizeViewDir(input.positionWS);
+                lightingInput.bakedGI         = SampleSH(finalNormal);
+
+                #if defined(_MAIN_LIGHT_SHADOWS) || defined(_MAIN_LIGHT_SHADOWS_CASCADE)
+                    lightingInput.shadowCoord = TransformWorldToShadowCoord(input.positionWS);
+                #endif
 
                 SurfaceData surface = (SurfaceData)0;
                 surface.albedo     = float3(0.3, 0.0, 0.0);
-                surface.metallic   = 0.0;
-                surface.specular   = float3(0, 0, 0);
                 surface.smoothness = 0.5;
-                surface.occlusion  = 1.0;
-                surface.emission   = float3(0, 0, 0);
                 surface.alpha      = 1.0;
 
                 return UniversalFragmentPBR(lightingInput, surface);
             }
-
             ENDHLSL
         }
     }
