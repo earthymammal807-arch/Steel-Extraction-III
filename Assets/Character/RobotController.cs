@@ -169,12 +169,16 @@ public class RobotController : MonoBehaviour, IControllable
     {
         if (_camera == null || _meshChildObj == null) return;
 
-        _yaw += rotvec.x * RotSpd * Time.deltaTime;
-        _pitch -= rotvec.y * RotSpd * Time.deltaTime;
+        // FIX: Remove Time.deltaTime from direct mouse delta inputs
+        // You may need to lower your 'RotSpd' slider in the inspector slightly after doing this!
+        _yaw += rotvec.x * RotSpd * 0.005f;
+        _pitch -= rotvec.y * RotSpd * 0.005f;
         _pitch = Mathf.Clamp(_pitch, -80f, 80f);
 
+        // Camera gets full yaw + pitch
         _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0);
 
+        // Model lerps toward the camera's yaw independently
         _modelYaw = Mathf.MoveTowardsAngle(_modelYaw, _yaw, Time.deltaTime * 70.0f);
         _meshChildObj.transform.localRotation = Quaternion.Euler(0, _modelYaw, 0);
     }

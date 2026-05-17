@@ -202,8 +202,8 @@ public class PlayerController : MonoBehaviour, IControllable
     {
                  if (_camera == null) return;
 
-                 _yaw += rotvec.x * RotSpd * Time.deltaTime;
-                 _pitch -= rotvec.y * RotSpd * Time.deltaTime;
+        _yaw += rotvec.x * RotSpd * 0.005f;
+        _pitch -= rotvec.y * RotSpd * 0.005f;
                  _pitch = Mathf.Clamp(_pitch, -80f, 80f);
 
                  _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0f);
