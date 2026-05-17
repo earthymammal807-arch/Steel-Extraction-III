@@ -90,7 +90,11 @@ public class InputController : MonoBehaviour
         if (currentPossessedObject == null) return;
         currentPossessedObject.ProcessMove(moveAction.ReadValue<Vector2>());
         currentPossessedObject.Rotate(lookAction.ReadValue<Vector2>());
+
+
+
     }
+    
 
     private void HandleInteraction(InputAction.CallbackContext ctx)
     {

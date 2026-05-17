@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 [RequireComponent(typeof(UnityEngine.CharacterController))]
 public class RobotController : MonoBehaviour, IControllable
@@ -50,7 +51,9 @@ public class RobotController : MonoBehaviour, IControllable
         cameraObj.transform.SetParent(this.transform);
         cameraObj.transform.localPosition = new Vector3(X, Y, Z);
         cameraObj.transform.localRotation = Quaternion.identity;
-
+        UniversalAdditionalCameraData cameraData = cameraObj.AddComponent<UniversalAdditionalCameraData>();
+        cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing; // SMAA
+        cameraData.antialiasingQuality = AntialiasingQuality.High;
 
 
         Cursor.lockState = CursorLockMode.Locked;
