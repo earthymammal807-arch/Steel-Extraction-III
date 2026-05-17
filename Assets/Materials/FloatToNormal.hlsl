@@ -1,18 +1,20 @@
 #ifndef PERFORMANT_NOISE_INCLUDED
 #define PERFORMANT_NOISE_INCLUDED
 
-// Instantly generates a 3D normal vector from any single float value
+// 1. KEEP THIS FOR YOUR CODE-BASED SHADERS
 float3 ValueToNormal(float heightValue, float bumpStrength)
 {
-    // Calculate how much the value changes between neighboring pixels
-    float dhdx = ddx(heightValue); // Horizontal slope
-    float dhdy = ddy(heightValue); // Vertical slope
-
-    // Construct the tangent normal vector
+    float dhdx = ddx(heightValue);
+    float dhdy = ddy(heightValue);
     float3 normal = float3(-dhdx * bumpStrength, -dhdy * bumpStrength, 1.0);
-    
     return normalize(normal);
 }
 
+// 2. ADD THIS FOR YOUR SHADER GRAPHS
+void ValueToNormal_float(float heightValue, float bumpStrength, out float3 OutNormal)
+{
+    // Simply routes the data to your original function safely
+    OutNormal = ValueToNormal(heightValue, bumpStrength);
+}
 
 #endif // PERFORMANT_NOISE_INCLUDED
