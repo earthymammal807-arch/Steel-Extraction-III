@@ -231,6 +231,66 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1001 &504676329
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 45.50546
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.18
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 2.5545828
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: -8679921383154817045, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 08af0e0f415942742827978c4b864399, type: 3}
+      propertyPath: m_Name
+      value: Ramp
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects:
+    - {fileID: 2801198648987864856, guid: 08af0e0f415942742827978c4b864399, type: 3}
+    - {fileID: -1991399312532384884, guid: 08af0e0f415942742827978c4b864399, type: 3}
+    - {fileID: -105322629044122262, guid: 08af0e0f415942742827978c4b864399, type: 3}
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 08af0e0f415942742827978c4b864399, type: 3}
 --- !u!1 &1245899153
 GameObject:
   m_ObjectHideFlags: 0
@@ -264,11 +324,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   characterMesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
   characterMaterial: {fileID: -876546973899608171, guid: 08af0e0f415942742827978c4b864399, type: 3}
-  MovementSpd: 10
+  WalkSpeed: 8
+  SprintSpeed: 10
   RotSpd: 15
+  Accel: 65
+  Decel: 100
+  AirAccel: 10
+  AirDecel: 8
+  JumpVelocity: 4.5
+  JumpBoost: 2.5
+  GroundFriction: 40
   Gravity: -9.81
   X: 0
-  Y: 0
+  Y: 1
   Z: 0
 --- !u!143 &1245899155
 CharacterController:
@@ -337,6 +405,7 @@ GameObject:
   - component: {fileID: 1983518296}
   - component: {fileID: 1983518298}
   - component: {fileID: 1983518299}
+  - component: {fileID: 1983518300}
   m_Layer: 0
   m_Name: Robot Character
   m_TagString: Untagged
@@ -413,12 +482,34 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::CharacterController
   characterMesh: {fileID: 1438010079642790418, guid: 08af0e0f415942742827978c4b864399, type: 3}
   characterMaterial: {fileID: -876546973899608171, guid: 08af0e0f415942742827978c4b864399, type: 3}
-  MovementSpd: 10
+  MovementSpd: 7.5
   RotSpd: 5
   Gravity: -9.81
   X: 0
   Y: 10
   Z: 0
+--- !u!64 &1983518300
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1983518295}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 0}
 --- !u!1 &2013410473
 GameObject:
   m_ObjectHideFlags: 1
@@ -476,3 +567,4 @@ SceneRoots:
   - {fileID: 1983518297}
   - {fileID: 8948412}
   - {fileID: 1245899157}
+  - {fileID: 504676329}

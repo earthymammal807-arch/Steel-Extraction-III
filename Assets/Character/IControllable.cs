@@ -6,4 +6,5 @@ public interface IControllable
     void Rotate(Vector2 rotationVector);
     // Add this line to handle camera/focus states
     void SetFocus(bool isFocused);
+    void Jump();
 }

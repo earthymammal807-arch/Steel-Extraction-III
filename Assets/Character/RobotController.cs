@@ -50,6 +50,13 @@ public class RobotController : MonoBehaviour, IControllable
         cameraObj.transform.SetParent(this.transform);
         cameraObj.transform.localPosition = new Vector3(X, Y, Z);
         cameraObj.transform.localRotation = Quaternion.identity;
+
+
+
+        Cursor.lockState = CursorLockMode.Locked;
+
+        // Optional: Hide the cursor explicitly (Locked mode usually hides it automatically)
+        Cursor.visible = false;
     }
 
     public void ProcessMove(Vector2 movementVector)
@@ -93,5 +100,11 @@ public class RobotController : MonoBehaviour, IControllable
             AudioListener listener = _camera.GetComponent<AudioListener>();
             if (listener != null) listener.enabled = isFocused;
         }
+    }
+
+    public void Jump()
+    {
+
+
     }
 }

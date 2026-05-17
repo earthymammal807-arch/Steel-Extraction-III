@@ -10,6 +10,8 @@ public class InputController : MonoBehaviour
     private InputAction moveAction;
     private InputAction lookAction;
     private InputAction interactAction;
+    private InputAction jumpAction;
+    private InputAction sprintAction;
 
     [Header("Targets")]
     [SerializeField] private PlayerController humanCharacter;
@@ -20,7 +22,7 @@ public class InputController : MonoBehaviour
 
     void Awake()
     {
-        // Build actions with bindings in code
+        // Build actions
         moveAction = new InputAction("Move", InputActionType.Value);
         moveAction.AddCompositeBinding("2DVector")
             .With("Up", "<Keyboard>/w")
@@ -34,6 +36,12 @@ public class InputController : MonoBehaviour
         interactAction = new InputAction("Interact", InputActionType.Button);
         interactAction.AddBinding("<Keyboard>/e");
 
+        jumpAction = new InputAction("Jump", InputActionType.Button);
+        jumpAction.AddBinding("<Keyboard>/space");
+
+        sprintAction = new InputAction("Sprint", InputActionType.Button);
+        sprintAction.AddBinding("<Keyboard>/leftShift");
+
         // Resolve interfaces
         humanInterface = humanCharacter;
         vehicleInterface = mechCharacter;
@@ -43,25 +51,48 @@ public class InputController : MonoBehaviour
 
         currentPossessedObject = startingControlTarget as IControllable;
 
-        // Set correct camera on frame one
         if (humanInterface != null) humanInterface.SetFocus(currentPossessedObject == humanInterface);
         if (vehicleInterface != null) vehicleInterface.SetFocus(currentPossessedObject == vehicleInterface);
+    }
 
-        interactAction.started += ctx => HandleInteraction();
+    void OnEnable()
+    {
+        // Enable first, then subscribe
+        moveAction.Enable();
+        lookAction.Enable();
+        interactAction.Enable();
+        jumpAction.Enable();
+        sprintAction.Enable();
+
+        interactAction.started += HandleInteraction;
+        sprintAction.performed += OnSprintPressed;
+        sprintAction.canceled += OnSprintReleased;
+        jumpAction.performed += OnJump;
+    }
+
+    void OnDisable()
+    {
+        // Unsubscribe before disabling to avoid stale references
+        interactAction.started -= HandleInteraction;
+        sprintAction.performed -= OnSprintPressed;
+        sprintAction.canceled -= OnSprintReleased;
+        jumpAction.performed -= OnJump;
+
+        moveAction.Disable();
+        lookAction.Disable();
+        interactAction.Disable();
+        jumpAction.Disable();
+        sprintAction.Disable();
     }
 
     void Update()
     {
         if (currentPossessedObject == null) return;
-
-        Vector2 moveInput = moveAction.ReadValue<Vector2>();
-        Vector2 lookInput = lookAction.ReadValue<Vector2>();
-
-        currentPossessedObject.ProcessMove(moveInput);
-        currentPossessedObject.Rotate(lookInput);
+        currentPossessedObject.ProcessMove(moveAction.ReadValue<Vector2>());
+        currentPossessedObject.Rotate(lookAction.ReadValue<Vector2>());
     }
 
-    private void HandleInteraction()
+    private void HandleInteraction(InputAction.CallbackContext ctx)
     {
         IControllable oldTarget = currentPossessedObject;
         IControllable newTarget = (currentPossessedObject == humanInterface) ? vehicleInterface : humanInterface;
@@ -70,20 +101,23 @@ public class InputController : MonoBehaviour
         if (newTarget != null) newTarget.SetFocus(true);
 
         currentPossessedObject = newTarget;
-        Debug.Log("Swapped active controls!");
+        Debug.Log("Swapped to: " + currentPossessedObject);
     }
 
-    void OnEnable()
+    private void OnSprintPressed(InputAction.CallbackContext ctx)
     {
-        moveAction.Enable();
-        lookAction.Enable();
-        interactAction.Enable();
+        Debug.Log("Sprint pressed");
+        if (currentPossessedObject is PlayerController p) p.SetSprint(true);
     }
 
-    void OnDisable()
+    private void OnSprintReleased(InputAction.CallbackContext ctx)
     {
-        moveAction.Disable();
-        lookAction.Disable();
-        interactAction.Disable();
+        Debug.Log("Sprint released");
+        if (currentPossessedObject is PlayerController p) p.SetSprint(false);
+    }
+
+    private void OnJump(InputAction.CallbackContext ctx)
+    {
+        if (currentPossessedObject is PlayerController p) p.Jump();
     }
 }
