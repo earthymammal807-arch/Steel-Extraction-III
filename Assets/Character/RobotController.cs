@@ -1,21 +1,21 @@
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-[RequireComponent(typeof(UnityEngine.CharacterController))]
+[RequireComponent(typeof(CharacterController))]
 public class RobotController : MonoBehaviour, IControllable
 {
-    private UnityEngine.CharacterController _robotController;
+    private CharacterController _robotController;
     private GameObject _meshChildObj;
-    private MeshFilter meshFilter;
-
-    private Vector3 _velocity;
+    private Camera _camera;
+    private bool _isFocused = false;
+    private bool _isThrusting;
+    private float _maxFuel;
+    private float _activeThrustTime = 0f;
     private float _yaw;
     private float _modelYaw;
     private float _pitch;
-    private Camera _camera;
-
-    private bool _isThrusting;
-    private float _maxFuel; // Used to cap fuel limit changes
+    private Vector3 _velocity;
+    private Vector3 _currentShakeOffset = Vector3.zero;
 
     [Header("Mesh Settings")]
     public Mesh characterMesh;
@@ -26,165 +26,125 @@ public class RobotController : MonoBehaviour, IControllable
     public float RotSpd = 15.0f;
 
     [Header("Physics Settings")]
-    public float Gravity = -9.81f;
+    public float Gravity = -4.81f;
 
     [Header("Thruster Settings")]
     [Range(0, 100)] public float mechFuel = 5.0f;
     [Range(1, 100)] public float mechThrustAccel = 25.0f;
-    [Range(1, 100)] public float mechThrustPower = 15.0f; 
+    [Range(1, 100)] public float mechThrustPower = 15.0f;
     [Range(-1, 100)] public float fuelIntake = 2.0f;
 
+    [Header("Dampening Settings")]
+    public float ThrustDampen = 10f;
+    public float AirDampen = 5f;
 
 
     [Header("Curve Sharpness")]
     [Tooltip("Higher numbers make it stay slow longer, then snap to top speed instantly at the end.")]
     [Range(0, 10)] public float curveSharpness = 3.0f;
 
-    private float _activeThrustTime = 0f;
-
     [Header("Camera Offset")]
     [Range(-100, 100)] public float X;
     [Range(-100, 100)] public float Y;
     [Range(-100, 100)] public float Z;
 
+
+
     void Awake()
     {
-
-        // Core component registration
-        _robotController = GetComponent<UnityEngine.CharacterController>();
+        _robotController = GetComponent<CharacterController>();
         _maxFuel = mechFuel;
 
-        // Child object for mesh
         _meshChildObj = new GameObject("RobotMesh");
-        _meshChildObj.transform.SetParent(this.transform);
+        _meshChildObj.transform.SetParent(transform);
         _meshChildObj.transform.localPosition = Vector3.zero;
         _meshChildObj.transform.localRotation = Quaternion.identity;
 
-        meshFilter = _meshChildObj.AddComponent<MeshFilter>();
-        MeshRenderer renderer = _meshChildObj.AddComponent<MeshRenderer>();
+        MeshFilter meshFilter = _meshChildObj.AddComponent<MeshFilter>();
+        MeshRenderer meshRenderer = _meshChildObj.AddComponent<MeshRenderer>();
 
         if (characterMesh != null)
         {
             meshFilter.mesh = characterMesh;
-
-            // Dynamically scale CharacterController to match the assigned mesh geometry
-            Bounds meshBounds = characterMesh.bounds;
-            _robotController.height = meshBounds.size.y;
-
-            // Radius is half of the largest horizontal width (X or Z)
-            _robotController.radius = Mathf.Max(meshBounds.size.x, meshBounds.size.z) * 0.5f;
-            _robotController.center = meshBounds.center;
-
-            // Padding prevents large meshes from sinking vertically past collider surfaces
+            Bounds b = characterMesh.bounds;
+            _robotController.height = b.size.y;
+            _robotController.radius = Mathf.Max(b.size.x, b.size.z) * 0.5f;
+            _robotController.center = b.center;
             _robotController.skinWidth = _robotController.radius * 0.08f;
         }
 
-        if (characterMaterial != null) renderer.material = characterMaterial;
+        if (characterMaterial != null) meshRenderer.material = characterMaterial;
 
-        // Child object for camera
         GameObject cameraObj = new GameObject("RobotCamera");
         _camera = cameraObj.AddComponent<Camera>();
-        cameraObj.transform.SetParent(this.transform);
+        cameraObj.transform.SetParent(transform);
         cameraObj.transform.localPosition = new Vector3(X, Y, Z);
         cameraObj.transform.localRotation = Quaternion.identity;
-        UniversalAdditionalCameraData cameraData = cameraObj.AddComponent<UniversalAdditionalCameraData>();
-        cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing; // SMAA
-        cameraData.antialiasingQuality = AntialiasingQuality.High;
         _camera.fieldOfView = 80.0f;
+
+        UniversalAdditionalCameraData cameraData = cameraObj.AddComponent<UniversalAdditionalCameraData>();
+        cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+        cameraData.antialiasingQuality = AntialiasingQuality.High;
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
 
+    void OnEnable() => CameraShake.OnShakeOffset += HandleShakeOffset;
+    void OnDisable() => CameraShake.OnShakeOffset -= HandleShakeOffset;
+
     public void ProcessMove(Vector2 movementVector)
     {
         if (_camera == null) return;
 
-        // Base ground movement direction calculation
-        Vector3 camForward = _camera.transform.forward; camForward.y = 0f; camForward.Normalize();
-        Vector3 camRight = _camera.transform.right; camRight.y = 0f; camRight.Normalize();
+        Vector3 camForward = Vector3.Scale(_camera.transform.forward, new Vector3(1, 0, 1)).normalized;
+        Vector3 camRight = Vector3.Scale(_camera.transform.right, new Vector3(1, 0, 1)).normalized;
+        Vector3 move = (camForward * movementVector.y + camRight * movementVector.x) * MovementSpd;
 
-        Vector3 move = camForward * movementVector.y + camRight * movementVector.x;
-        move *= MovementSpd; // Multiply standard speed before blending momentum
-
-        // Ground handling
         if (_robotController.isGrounded)
         {
-            // Replenish fuel when grounded
             if (mechFuel < _maxFuel) mechFuel += Time.deltaTime * 2f;
-
-            if (_velocity.y < 0 && !_isThrusting)
-                _velocity.y = -2f;
+            if (_velocity.y < 0f && !_isThrusting) _velocity.y = -2f;
         }
 
-        // Thruster execution step
-        if (_isThrusting && mechFuel > 0)
+        if (_isThrusting && mechFuel > 0f)
         {
             _activeThrustTime += Time.deltaTime;
+            float curveProfile = Mathf.Pow(Mathf.Clamp01(_activeThrustTime / _maxFuel), curveSharpness);
+            float multiplier = Mathf.Lerp(0.2f, 3.0f, curveProfile);
 
-            // 1. Get our baseline progress fraction (0.0 to 1.0)
-            float progress = Mathf.Clamp01(_activeThrustTime / _maxFuel);
-
-            // 2. Clear math curve generation using a power function.
-            // It smoothly scales from 0.0 to 1.0 on a steep curve without going negative.
-            float curveProfile = Mathf.Pow(progress, curveSharpness);
-
-            // 3. Scale your multiplier smoothly from a low 0.2x up to your 3.0x peak
-            float currentMultiplier = Mathf.Lerp(0.2f, 3.0f, curveProfile);
-
-            // 4. Accelerate along your camera gaze vector
-            _velocity += _camera.transform.forward * (mechThrustAccel * currentMultiplier * Time.deltaTime);
-            _velocity = Vector3.ClampMagnitude(_velocity, mechThrustPower * currentMultiplier);
-
+            _velocity += _camera.transform.forward * (mechThrustAccel * multiplier * Time.deltaTime);
+            _velocity = Vector3.ClampMagnitude(_velocity, mechThrustPower * multiplier);
             mechFuel -= Time.deltaTime * fuelIntake;
-
-
-
-
-            // Paste this inside the thruster block:
-            // Debug.Log($"Multi: {currentMultiplier:F2} | Cur Speed: {_velocity.magnitude:F2}");
-
         }
         else
         {
-            // Reset the curve timeline if we release space or deplete fuel resources
             _activeThrustTime = 0f;
-
-            // Apply standard gravity when thruster isn't active
             _velocity.y += Gravity * Time.deltaTime;
-
-            // Horizontal deceleration friction loop to clean up lingering thrust forces
-            _velocity.x = Mathf.MoveTowards(_velocity.x, 0f, Time.deltaTime * 10f);
-            _velocity.z = Mathf.MoveTowards(_velocity.z, 0f, Time.deltaTime * 10f);
+            _velocity.x = Mathf.MoveTowards(_velocity.x, 0f, Time.deltaTime * AirDampen);
+            _velocity.z = Mathf.MoveTowards(_velocity.z, 0f, Time.deltaTime * AirDampen);
         }
 
-        // Combine base joystick movement with active momentum force matrix
-        Vector3 finalFrameMovement = move + _velocity;
-
-        // Final movement calculation uses a single Time.deltaTime pass
-        _robotController.Move(finalFrameMovement * Time.deltaTime);
+        _robotController.Move((move + _velocity) * Time.deltaTime);
     }
 
     public void Rotate(Vector2 rotvec)
     {
         if (_camera == null || _meshChildObj == null) return;
 
-        // FIX: Remove Time.deltaTime from direct mouse delta inputs
-        // You may need to lower your 'RotSpd' slider in the inspector slightly after doing this!
         _yaw += rotvec.x * RotSpd * 0.005f;
         _pitch -= rotvec.y * RotSpd * 0.005f;
         _pitch = Mathf.Clamp(_pitch, -80f, 80f);
 
-        // Camera gets full yaw + pitch
-        _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0);
-
-        // Model lerps toward the camera's yaw independently
+        _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0f);
         _modelYaw = Mathf.MoveTowardsAngle(_modelYaw, _yaw, Time.deltaTime * 70.0f);
-        _meshChildObj.transform.localRotation = Quaternion.Euler(0, _modelYaw, 0);
+        _meshChildObj.transform.localRotation = Quaternion.Euler(0f, _modelYaw, 0f);
     }
 
     public void SetFocus(bool isFocused)
     {
+        _isFocused = isFocused;
+
         if (_camera != null)
         {
             _camera.enabled = isFocused;
@@ -195,14 +155,24 @@ public class RobotController : MonoBehaviour, IControllable
 
     public void Jump()
     {
-        if (mechFuel > 0)
-        {
-            _isThrusting = true;
-        }
+        if (mechFuel <= 0f) return;
+
+        _isThrusting = true;
+        CameraShake.Instance?.TriggerShake(mechFuel * fuelIntake, 0.2f);
     }
 
     public void JumpCancelled()
     {
         _isThrusting = false;
+        CameraShake.Instance?.CancelShake();
     }
+
+    void LateUpdate()
+    {
+        if (_camera == null) return;
+        _camera.transform.localPosition = new Vector3(X, Y, Z) + _currentShakeOffset;
+    }
+
+    private void HandleShakeOffset(Vector3 offset) =>
+        _currentShakeOffset = _isFocused ? offset : Vector3.zero;
 }
