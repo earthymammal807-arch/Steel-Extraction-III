@@ -40,9 +40,7 @@ public class PlayerController : MonoBehaviour, IControllable
     [Range(-100, 100)] public float Z;
 
     [Header("Audio Settings")]
-    // Exposed as public so you can drag your jump sound into the Inspector
     public AudioClip jumpClip;
-    private ObjectAudioManager audioManager;
 
     private Vector3 _currentShakeOffset = Vector3.zero;
     private float _currentSpeed;
@@ -56,13 +54,7 @@ public class PlayerController : MonoBehaviour, IControllable
         _playerController = GetComponent<CharacterController>();
         _currentSpeed = WalkSpeed;
 
-        // Automatically fetch or attach the ObjectAudioManager component
-        audioManager = GetComponent<ObjectAudioManager>();
-        if (audioManager == null)
-        {
-            audioManager = gameObject.AddComponent<ObjectAudioManager>();
-        }
-
+        // Create camera immediately in Awake so SetFocus has something to work with
         GameObject cameraObj = new GameObject("PlayerCamera");
         _camera = cameraObj.AddComponent<Camera>();
         cameraObj.transform.SetParent(transform);
@@ -75,8 +67,7 @@ public class PlayerController : MonoBehaviour, IControllable
         cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
         cameraData.antialiasingQuality = AntialiasingQuality.High;
 
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        _camera.enabled = false; // Start disabled, InitializeCharacter will enable the right one
     }
 
     void OnEnable() => CameraShake.OnShakeOffset += HandleShakeOffset;
@@ -88,6 +79,22 @@ public class PlayerController : MonoBehaviour, IControllable
     {
         if (_playerController == null || _camera == null) return;
 
+        // 1. GATED PHYSICS CONTROL: If not possessed, only apply gravity and exit early
+        if (!_isPossessed)
+        {
+            if (!_playerController.isGrounded)
+            {
+                _velocity.y += Gravity * Time.deltaTime;
+                _playerController.Move(new Vector3(0f, _velocity.y, 0f) * Time.deltaTime);
+            }
+            else
+            {
+                _velocity.y = -2f; // Keep grounded character snapped to floor
+            }
+            return;
+        }
+
+        // 2. ACTIVE POSSESSED MOVEMENT
         float dt = Time.deltaTime;
         bool onGround = _playerController.isGrounded;
 
@@ -101,7 +108,8 @@ public class PlayerController : MonoBehaviour, IControllable
 
         if (desiredDir.sqrMagnitude > 1f) desiredDir.Normalize();
 
-        Vector3 flatVel = _isPossessed ? new Vector3(_velocity.x, 0f, _velocity.z) : Vector3.zero;
+        // FIXED: Removed the conditional check that was wiping flatVel out to Vector3.zero
+        Vector3 flatVel = new Vector3(_velocity.x, 0f, _velocity.z);
         float speed = flatVel.magnitude;
         if (speed < 0.01f) { flatVel = Vector3.zero; speed = 0f; }
 
@@ -131,10 +139,9 @@ public class PlayerController : MonoBehaviour, IControllable
             _velocity.z += _jumpDir.z * JumpBoost;
             _jumpQueued = false;
 
-            // Trigger the jump audio effect right as the physics push off the ground
-            if (audioManager != null && jumpClip != null)
+            if (ObjectAudioManager.Instance != null && jumpClip != null)
             {
-                audioManager.PlayOneShot(jumpClip);
+                ObjectAudioManager.Instance.PlayOneShot(jumpClip);
             }
         }
 
@@ -165,7 +172,6 @@ public class PlayerController : MonoBehaviour, IControllable
 
     public void JumpCancelled()
     {
-        // FIXED: Replaced CameraShake.Instance?.TriggerShake with an explicit null check
         if (CameraShake.Instance != null)
         {
             CameraShake.Instance.TriggerShake(0.5f, 0.2f);
@@ -177,12 +183,9 @@ public class PlayerController : MonoBehaviour, IControllable
     public void SetFocus(bool isFocused)
     {
         _isPossessed = isFocused;
-
         if (_camera != null)
         {
             _camera.enabled = isFocused;
-            AudioListener listener = _camera.GetComponent<AudioListener>();
-            if (listener != null) listener.enabled = isFocused;
         }
     }
 
@@ -194,4 +197,10 @@ public class PlayerController : MonoBehaviour, IControllable
 
     private void HandleShakeOffset(Vector3 offset) =>
         _currentShakeOffset = _isPossessed ? offset : Vector3.zero;
+
+    public void InitializeCharacter(bool startsPossessed)
+    {
+
+        SetFocus(startsPossessed);
+    }
 }

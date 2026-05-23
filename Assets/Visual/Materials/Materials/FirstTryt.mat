@@ -114,21 +114,23 @@ Material:
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EnvironmentReflections: 1
-    - _FlaotFaggot: 1
-    - _Float: 1.08
+    - _FlaotFaggot: 3.23
+    - _Float: 0.2
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
     - _MetalDick: 0.6
     - _Metallic: 0
+    - _Multiplier: 1
     - _OcclusionStrength: 1
     - _Parallax: 0.005
+    - _Pow: 0
     - _QueueControl: 0
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _Scale_U: 3
     - _Scale_V: 3
-    - _Smooth_DIck: 0.39
+    - _Smooth_DIck: 1.48
     - _Smoothness: 0.5
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
@@ -138,6 +140,9 @@ Material:
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
+    - _hieght_multipleir: 0
+    - _maxclamp: 1
+    - _minclamp: 0.55
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}

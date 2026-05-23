@@ -16,7 +16,6 @@ public class RobotController : MonoBehaviour, IControllable
     private float _pitch;
     private Vector3 _velocity;
     private Vector3 _currentShakeOffset = Vector3.zero;
-
     private bool _isThrusterLocked = false;
 
     [Header("Mesh Settings")]
@@ -35,7 +34,6 @@ public class RobotController : MonoBehaviour, IControllable
     [Range(1, 100)] public float mechThrustAccel = 25.0f;
     [Range(1, 100)] public float mechThrustPower = 15.0f;
     [Range(-1, 100)] public float fuelIntake = 2.0f;
-
     [Range(0f, 1f)] public float fuelRecoveryThreshold = 0.2f;
 
     [Header("Dampening Settings")]
@@ -53,18 +51,26 @@ public class RobotController : MonoBehaviour, IControllable
 
     [Header("Audio Settings")]
     public AudioClip thrusterClip;
-    private ObjectAudioManager audioManager;
 
     void Awake()
     {
         _robotController = GetComponent<CharacterController>();
         _maxFuel = mechFuel;
 
-        audioManager = GetComponent<ObjectAudioManager>();
-        if (audioManager == null)
-        {
-            audioManager = gameObject.AddComponent<ObjectAudioManager>();
-        }
+
+
+        GameObject cameraObj = new GameObject("PlayerCamera");
+        _camera = cameraObj.AddComponent<Camera>();
+        cameraObj.transform.SetParent(transform);
+        cameraObj.transform.localPosition = new Vector3(X, Y, Z);
+        cameraObj.transform.localRotation = Quaternion.identity;
+        _camera.nearClipPlane = 0.01f;
+        _camera.farClipPlane = 1000f;
+
+        UniversalAdditionalCameraData cameraData = cameraObj.AddComponent<UniversalAdditionalCameraData>();
+        cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+        cameraData.antialiasingQuality = AntialiasingQuality.High;
+        // FIXED: All dynamic ObjectAudioManager generation code has been stripped out from here!
 
         _meshChildObj = new GameObject("RobotMesh");
         _meshChildObj.transform.SetParent(transform);
@@ -84,21 +90,8 @@ public class RobotController : MonoBehaviour, IControllable
             _robotController.skinWidth = _robotController.radius * 0.08f;
         }
 
-        if (characterMaterial != null) meshRenderer.material = characterMaterial;
-
-        GameObject cameraObj = new GameObject("RobotCamera");
-        _camera = cameraObj.AddComponent<Camera>();
-        cameraObj.transform.SetParent(transform);
-        cameraObj.transform.localPosition = new Vector3(X, Y, Z);
-        cameraObj.transform.localRotation = Quaternion.identity;
-        _camera.fieldOfView = 80.0f;
-
-        UniversalAdditionalCameraData cameraData = cameraObj.AddComponent<UniversalAdditionalCameraData>();
-        cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-        cameraData.antialiasingQuality = AntialiasingQuality.High;
-
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        if (characterMaterial != null)
+            meshRenderer.material = characterMaterial;
     }
 
     void OnEnable() => CameraShake.OnShakeOffset += HandleShakeOffset;
@@ -106,8 +99,27 @@ public class RobotController : MonoBehaviour, IControllable
 
     public void ProcessMove(Vector2 movementVector)
     {
-        if (_camera == null) return;
+        if (_robotController == null || _camera == null) return;
 
+        // 1. GATED PHYSICS CONTROL: If not focused, only apply gravity and exit early
+        if (!_isFocused)
+        {
+            _isThrusting = false; // Force thrusters off if we leave the mech mid-air
+            _activeThrustTime = 0f;
+
+            if (!_robotController.isGrounded)
+            {
+                _velocity.y += Gravity * Time.deltaTime;
+                _robotController.Move(new Vector3(0f, _velocity.y, 0f) * Time.deltaTime);
+            }
+            else
+            {
+                _velocity.y = -2f; // Keep grounded robot snapped to floor
+            }
+            return;
+        }
+
+        // 2. ACTIVE POSSESSED MOVEMENT
         Vector3 camForward = Vector3.Scale(_camera.transform.forward, new Vector3(1, 0, 1)).normalized;
         Vector3 camRight = Vector3.Scale(_camera.transform.right, new Vector3(1, 0, 1)).normalized;
         Vector3 move = (camForward * movementVector.y + camRight * movementVector.x) * MovementSpd;
@@ -151,6 +163,7 @@ public class RobotController : MonoBehaviour, IControllable
         _robotController.Move((move + _velocity) * Time.deltaTime);
     }
 
+
     public void Rotate(Vector2 rotvec)
     {
         if (_camera == null || _meshChildObj == null) return;
@@ -160,6 +173,7 @@ public class RobotController : MonoBehaviour, IControllable
         _pitch = Mathf.Clamp(_pitch, -80f, 80f);
 
         _camera.transform.localRotation = Quaternion.Euler(_pitch, _yaw, 0f);
+
         _modelYaw = Mathf.MoveTowardsAngle(_modelYaw, _yaw, Time.deltaTime * 70.0f);
         _meshChildObj.transform.localRotation = Quaternion.Euler(0f, _modelYaw, 0f);
     }
@@ -167,12 +181,15 @@ public class RobotController : MonoBehaviour, IControllable
     public void SetFocus(bool isFocused)
     {
         _isFocused = isFocused;
-
         if (_camera != null)
         {
             _camera.enabled = isFocused;
-            AudioListener listener = _camera.GetComponent<AudioListener>();
-            if (listener != null) listener.enabled = isFocused;
+        }
+
+        if (!isFocused)
+        {
+            _isThrusting = false;
+            ObjectAudioManager.Instance?.StopAudio(true);
         }
     }
 
@@ -182,15 +199,15 @@ public class RobotController : MonoBehaviour, IControllable
 
         _isThrusting = true;
 
-        // FIXED: Replaced CameraShake.Instance?.TriggerShake with an explicit null check
         if (CameraShake.Instance != null)
         {
             CameraShake.Instance.TriggerShake(mechFuel * fuelIntake, 0.10f);
         }
 
-        if (audioManager != null && thrusterClip != null)
+        // FIXED: Swapped to global ObjectAudioManager singleton reference
+        if (ObjectAudioManager.Instance != null && thrusterClip != null)
         {
-            audioManager.PlayLoopTimed(thrusterClip, 10.0f, true, 1f);
+            ObjectAudioManager.Instance.PlayLoopTimed(thrusterClip, mechFuel / fuelIntake, true, 1f);
         }
     }
 
@@ -198,15 +215,15 @@ public class RobotController : MonoBehaviour, IControllable
     {
         _isThrusting = false;
 
-        // FIXED: Replaced CameraShake.Instance?.CancelShake with an explicit null check
         if (CameraShake.Instance != null)
         {
             CameraShake.Instance.CancelShake();
         }
 
-        if (audioManager != null)
+        // FIXED: Swapped to global ObjectAudioManager singleton reference
+        if (ObjectAudioManager.Instance != null)
         {
-            audioManager.StopAudio(fade: true);
+            ObjectAudioManager.Instance.StopAudio(fade: true);
         }
     }
 
@@ -218,4 +235,10 @@ public class RobotController : MonoBehaviour, IControllable
 
     private void HandleShakeOffset(Vector3 offset) =>
         _currentShakeOffset = _isFocused ? offset : Vector3.zero;
+
+    public void InitializeCharacter(bool startsPossessed)
+    {
+
+        SetFocus(startsPossessed);
+    }
 }

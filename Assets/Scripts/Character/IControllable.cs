@@ -8,4 +8,5 @@ public interface IControllable
     void SetFocus(bool isFocused);
     void Jump();
     void JumpCancelled();
+    void InitializeCharacter(bool startsPossessed);
 }

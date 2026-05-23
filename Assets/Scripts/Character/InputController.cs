@@ -17,12 +17,19 @@ public class InputController : MonoBehaviour
     [SerializeField] private PlayerController humanCharacter;
     [SerializeField] private RobotController mechCharacter;
 
+    public enum StartingSelection { Human, Robot }
     [Header("Starting Settings")]
-    [SerializeField] private MonoBehaviour startingControlTarget;
+    [SerializeField] private StartingSelection startAs = StartingSelection.Human;
 
+
+    public void SetStartingCharacter(IControllable starting, IControllable other)
+    {
+        currentPossessedObject = starting;
+        starting.InitializeCharacter(true);
+        other.InitializeCharacter(false);
+    }
     void Awake()
     {
-        // Build actions
         moveAction = new InputAction("Move", InputActionType.Value);
         moveAction.AddCompositeBinding("2DVector")
             .With("Up", "<Keyboard>/w")
@@ -42,22 +49,12 @@ public class InputController : MonoBehaviour
         sprintAction = new InputAction("Sprint", InputActionType.Button);
         sprintAction.AddBinding("<Keyboard>/leftShift");
 
-        // Resolve interfaces
         humanInterface = humanCharacter;
         vehicleInterface = mechCharacter;
-
-        if (startingControlTarget == null)
-            startingControlTarget = humanCharacter;
-
-        currentPossessedObject = startingControlTarget as IControllable;
-
-        if (humanInterface != null) humanInterface.SetFocus(currentPossessedObject == humanInterface);
-        if (vehicleInterface != null) vehicleInterface.SetFocus(currentPossessedObject == vehicleInterface);
     }
 
     void OnEnable()
     {
-        // Enable first, then subscribe
         moveAction.Enable();
         lookAction.Enable();
         interactAction.Enable();
@@ -73,7 +70,6 @@ public class InputController : MonoBehaviour
 
     void OnDisable()
     {
-        // Unsubscribe before disabling to avoid stale references
         interactAction.started -= HandleInteraction;
         sprintAction.performed -= OnSprintPressed;
         sprintAction.canceled -= OnSprintReleased;
@@ -91,10 +87,6 @@ public class InputController : MonoBehaviour
     {
         if (currentPossessedObject == null) return;
         currentPossessedObject.ProcessMove(moveAction.ReadValue<Vector2>());
-    
-
-
-
     }
 
     void LateUpdate()
@@ -103,12 +95,12 @@ public class InputController : MonoBehaviour
         currentPossessedObject.Rotate(lookAction.ReadValue<Vector2>());
     }
 
-
     private void HandleInteraction(InputAction.CallbackContext ctx)
     {
         IControllable oldTarget = currentPossessedObject;
         IControllable newTarget = (currentPossessedObject == humanInterface) ? vehicleInterface : humanInterface;
 
+        // Fix: Use SetFocus to properly shut down/activate cameras and variables
         if (oldTarget != null) oldTarget.SetFocus(false);
         if (newTarget != null) newTarget.SetFocus(true);
 
@@ -118,22 +110,21 @@ public class InputController : MonoBehaviour
 
     private void OnSprintPressed(InputAction.CallbackContext ctx)
     {
-        Debug.Log("Sprint pressed");
         if (currentPossessedObject is PlayerController p) p.SetSprint(true);
     }
 
     private void OnSprintReleased(InputAction.CallbackContext ctx)
     {
-        Debug.Log("Sprint released");
         if (currentPossessedObject is PlayerController p) p.SetSprint(false);
     }
 
     private void OnJump(InputAction.CallbackContext ctx)
     {
-        currentPossessedObject.Jump();
+        if (currentPossessedObject != null) currentPossessedObject.Jump();
     }
+
     private void OnJumpReleased(InputAction.CallbackContext ctx)
     {
-        currentPossessedObject.JumpCancelled();
+        if (currentPossessedObject != null) currentPossessedObject.JumpCancelled();
     }
 }
